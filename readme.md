@@ -68,6 +68,10 @@ reasoning that the rest of the documents assume.
 
 ## Licence
 
-Apache 2.0. The project commits to support-and-services commercialisation:
-no post-hoc relicensing, no feature gating, no open-core split. Every feature
-described in these documents ships under this licence or does not ship.
+MIT. The project commits to support-and-services commercialisation: no
+relicensing to more restrictive terms, no feature gating, no open-core split.
+Every feature described in these documents ships under this licence or does
+not ship.
+
+The design documents were first published under Apache 2.0 and moved to MIT
+before any code was written.
