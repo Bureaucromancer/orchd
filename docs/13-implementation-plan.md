@@ -73,6 +73,12 @@ surfaces, not from running binaries, and two of their claims are load-bearing.
    the OpenAI and A1111 families work. If it reproduces on the pinned build,
    the readiness gate needs its documented fallback from day one rather than as
    a later fix.
+5. Pin `sd-server` to the build Lemonade ships, `master-894-017cc8e` (Sep 22,
+   2026), to start with.
+   - Magic Lantern's first spike records fixtures from that build, so one set
+     serves both projects, and `fake-sd` (W6) is checked against them.
+   - While it runs, try cancelling a generating job, and look for step counts
+     with a preview enabled (`11-open-questions.md` items 18 and 19).
 
 **Not blocking M1:** the two `--fit` spikes (`11-open-questions.md` items 6 and
 7). They block M4, because the `--fit-target` arithmetic in `04-admission.md`
@@ -149,12 +155,17 @@ and a small payload; an in-process fan-out to subscribers; a bounded ring of
 recent events so a late subscriber sees context; the SSE handler from
 `05-api.md`. Event kinds as listed there: `admission`, `load_start`,
 `load_complete`, `evict`, `drain`, `child_exit`, `job_state`, `yield`,
-`watchdog`, `config_reload`, `ledger_reconcile`. Emit the ones that exist yet;
-the vocabulary is fixed now because the manager will depend on it (`adr/0005`).
+`watchdog`, `config_reload`, `ledger_reconcile`, `reset`. Emit the ones that
+exist yet; the vocabulary is fixed now because the manager will depend on it
+(`adr/0005`). Event ids are `<boot id>:<seq>`. The handler resumes from
+`Last-Event-ID`, or sends `reset` when it cannot (`05-api.md`).
 
-**Done when.** A subscriber receives events in order with no publisher
-blocking; a slow subscriber is dropped rather than stalling the emitter; the
-SSE endpoint survives a client disconnecting mid-stream.
+**Done when.**
+- A subscriber receives events in order with no publisher blocking.
+- A slow subscriber is dropped rather than stalling the emitter.
+- The SSE endpoint survives a client disconnecting mid-stream.
+- A reconnect with a recent `Last-Event-ID` misses nothing; one with a stale
+  id gets `reset`.
 
 ---
 
@@ -264,7 +275,7 @@ having checked).
 
 `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/models`;
 `/orchd/v1/status` with the fields that exist at M1; `/orchd/v1/models` and
-`/orchd/v1/models/{id}`; `load` / `unload`; `/orchd/v1/config` and
+`/orchd/v1/models/{id}`, which never load anything; `load` / `unload`; `/orchd/v1/config` and
 `config/reload`; native passthrough; `/healthz`.
 
 Implement the full error vocabulary from `05-api.md` now, even where some codes
@@ -275,9 +286,11 @@ absence.
 Model ids resolve against orchd's catalogue only, never passed through for the
 engine to resolve.
 
-**Done when.** An unknown model id returns 404 with the available ids; every
-error path returns the documented shape; passthrough reaches `/props` on a
-loaded model.
+**Done when.**
+- An unknown model id returns 404 with the available ids.
+- Every error path returns the documented shape.
+- Passthrough reaches `/props` on a loaded model.
+- `GET /orchd/v1/models/{id}` on an unloaded model starts no process.
 
 ---
 
@@ -287,6 +300,12 @@ The generic store from `02-architecture.md`: a `Job` with id, kind, state,
 timestamps, result, error; kinds `img_gen`, `vid_gen`, `download`, `calibrate`
 declared but only the store implemented; `/orchd/v1/jobs` and `jobs/{id}` and
 `jobs/{id}/cancel` wired to it.
+
+Two details are fixed now because clients depend on them (`05-api.md` §
+"Job-aware clients"):
+- Ids are ULIDs, never reused, even across restarts.
+- A job carries `submitted_at` from the first version, so a failure before
+  submission is distinguishable from one after.
 
 Generic from the start is a deliberate cost paid now. `download` and
 `calibrate` are the manager's progress surfaces, and bolting them onto an
@@ -330,6 +349,19 @@ That is a request arriving at orchd, a fake engine being spawned on demand, and
 tokens streaming back. Everything after it is filling in. Reaching it before
 W3–W5 are complete is fine; just do not let the stubs calcify — W4's event bus
 in particular gets harder the longer the call sites exist without it.
+
+---
+
+## After M1: the image slice
+
+`09-roadmap.md` puts the image half of M3 next, ahead of M2, because Magic
+Lantern needs it. Its work units are not decomposed here yet. When they are,
+they follow the same pattern as M1:
+
+- `fake-sd` comes before the backend.
+- Job interception and `GET /models/{id}` (`05-api.md`) come before any client
+  is pointed at orchd.
+- S35–S40 join S9–S12 as the definition of done.
 
 ---
 

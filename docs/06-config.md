@@ -51,7 +51,7 @@ policy:
   idle_ttl_relaxed: 30m
   idle_ttl_pressured: 60s
   pressure_threshold: 0.85
-  queue_timeout: 120s
+  queue_timeout: 120s           # requests holding a connection; async jobs exempt
   drain_timeout: 30s
   start_timeout: auto
   image_jobs_block_text: false
@@ -59,6 +59,7 @@ policy:
   yield_threshold: 0.5
   yield_recovery_delay: 60s
   starvation_promote_after: 5
+  unfetched_result_hold: 60s    # demand eviction waits this long for a result to be fetched
 
 engines:
   llamacpp:
@@ -135,12 +136,12 @@ limits:
   max_resolution: 1024x1024
   max_batch_count: 4
 
-defaults:                       # applied when the client omits them
+defaults:                       # applied when the client omits them, on /v1 only
   sample_steps: 28
   sample_method: euler
   scheduler: discrete
 
-vae_tiling: auto                # auto | always | never — see engines/sdcpp.md
+vae_tiling: auto                # auto | always | never; fills only what the request leaves unset
 
 envelope:
   peak_mib: auto                # auto → calibration job on first use

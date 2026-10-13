@@ -60,6 +60,12 @@ resolved by a small experiment before code depends on them.
     should prefer evicting the text model over tiling, which inverts the
     current preference.
 
+    It is also not known whether tiled decode changes pixels. If it does,
+    tiling under memory pressure makes the same request come out differently
+    depending on what else is loaded. That is why orchd never overrides a
+    tiling setting the request makes (`05-api.md`). Magic Lantern's first spike
+    measures it.
+
 ## Raised by the console
 
 12. **Companion-file inference for diffusion models.** How far should automatic
@@ -71,6 +77,11 @@ resolved by a small experiment before code depends on them.
 13. **Where do presets live?** `presets.d/` as first-class config files, or
     inside a model definition? Separate files compose better across models and
     are shareable; nested is simpler. Leaning separate, undecided.
+
+    A prior question: whether orchd needs presets at all. Magic Lantern keeps
+    generation presets of its own, so a generation UI is not a reason to have
+    them here. Whatever is decided, presets apply only to `/v1`, never to
+    passthrough. Leaning: leave them out of the first console.
 
 14. **Does the console need its own auth?** The core has bearer-token
     passthrough only and binds loopback by default. The moment someone binds
@@ -94,3 +105,38 @@ resolved by a small experiment before code depends on them.
     should certainly not change a system sysctl on its own. Whether it should
     *recommend* one, as it does with the Windows sysmem fallback policy, is
     open.
+
+## Raised by Magic Lantern
+
+From building orchd alongside Magic Lantern, its first job-aware client.
+
+18. **SPIKE — can the pinned sd-server cancel a generating job?**
+    `01-engine-shapes.md` and `engines/sdcpp.md` say yes, behind
+    `cancel_generating`. Magic Lantern's reading of the source
+    (stable-diffusion.cpp `2988060`) found a `409`.
+    - It is probably build-dependent. Read the feature flag; never assume.
+    - `adr/0006` keeps the ledger honest either way, but how quickly memory
+      comes back after a disconnect depends on the answer.
+
+19. **SPIKE — does the pinned build report step counts?** Builds with
+    native-API previews report `step` and `total_steps` while a preview is
+    enabled. If the pinned build does:
+    - passthrough must relay them, which it does by keeping unknown fields;
+    - `ProgressReporter` may become implementable for sd.cpp.
+
+20. **Where does orchd run relative to Lemonade?** The author's homelab runs
+    sd-server under Lemonade, and this milestone set is NVIDIA-only.
+    - Lemonade and orchd cannot share a GPU. Lemonade's loads are invisible to
+      the ledger (`adr/0001`), so orchd would count them as foreign pressure
+      and yield.
+    - Either orchd replaces Lemonade on that host, or it runs on another
+      machine and serves Magic Lantern over the LAN.
+    - The second makes item 14, auth on a non-loopback bind, a day-one
+      question.
+
+21. **Console framework.** `08-console.md` named Svelte or Preact, and
+    `.gitignore` anticipates SvelteKit.
+    - Magic Lantern and StoryEngine are both React (Vite, TanStack, Tailwind),
+      and one developer across three projects is better served by one stack.
+    - Leaning React, still built to static files, checked in and embedded.
+    - Preact, if bundle size turns out to matter.

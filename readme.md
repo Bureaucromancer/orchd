@@ -56,11 +56,12 @@ docs/
   10-testing.md          acceptance scenario catalogue
   11-open-questions.md   decisions deliberately not made yet
   12-glossary.md         terms used precisely throughout
+  13-implementation-plan.md  work units for M1, and what flows into the next milestones
   engines/
     llamacpp.md          verified API surface and integration notes
     sdcpp.md             verified API surface and integration notes
   adr/
-    0001 … 0005          architecture decision records
+    0001 … 0006          architecture decision records
 ```
 
 Read `00`, `01`, `03` and `04` before writing any code. They contain the

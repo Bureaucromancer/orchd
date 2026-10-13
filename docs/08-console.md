@@ -75,7 +75,10 @@ are precisely what a generation UI needs in order to populate its own pickers.
 So the console's API is dual-purpose by construction: it is the inventory
 service any front-end wants, and the console is simply its first client. Any
 generation UI — including one built later in this suite — consumes the same
-endpoints rather than reimplementing model discovery.
+endpoints rather than reimplementing model discovery. Magic Lantern, a
+generation front-end built alongside orchd, is the first. It reads models,
+their state and their LoRAs here, and generates through native passthrough
+(`05-api.md` § "Job-aware clients").
 
 ## What the console does
 
@@ -114,7 +117,8 @@ referenced, not copied.
 ### LoRA library
 
 Metadata orchd otherwise has no reason to know: base-model compatibility,
-trigger words, default weight, a note, a thumbnail. Stored in `loras.d/`.
+trigger words, default weight, a note, a thumbnail, and the file's SHA-256 so
+a client can recognise the same LoRA on another route. Stored in `loras.d/`.
 
 Because the engines differ, the console presents one concept and translates:
 
@@ -130,6 +134,12 @@ is the A1111-style parameter paradigm rather than a node graph, and it is
 deliberately the shallow version: a preset is a saved set of defaults, not a
 workflow engine. Presets surface in `GET /orchd/v1/models` as selectable ids so
 that a generation UI can offer them without knowing what a LoRA is.
+
+Presets apply only to orchd's own `/v1` surface, never to native passthrough.
+A client that records what it sent never has hidden defaults underneath it.
+A generation UI with presets of its own, such as Magic Lantern, does not need
+these at all. Whether the first console ships them is open
+(`11-open-questions.md` item 13).
 
 ### Flags with guardrails
 
@@ -188,9 +198,9 @@ cloud account of any kind.
 
 ## Technology
 
-Keep it boring and keep the build out of the critical path: a small SPA
-(Svelte or Preact), no server-side rendering, no runtime framework in the Go
-build, one `npm run build` producing static assets committed or built in CI and
+Keep it boring and keep the build out of the critical path: a small SPA (the
+framework is open — `11-open-questions.md` item 21), no server-side
+rendering, no runtime framework in the Go build, one `npm run build` producing static assets committed or built in CI and
 embedded with `embed`. A contributor must be able to build orchd without a
 Node toolchain — the embedded bundle is checked in, and a `make console`
 regenerates it.

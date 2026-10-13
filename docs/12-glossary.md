@@ -63,6 +63,10 @@ backstop.
 `img_gen`, `vid_gen`, `download`, `calibrate`. Image generation is a job even
 when the client's request is synchronous.
 
+**Job-aware client** — a client that keeps its own queue and records exactly
+what it sent, and so depends on the guarantees listed in `05-api.md` §
+"Job-aware clients". Magic Lantern is the first.
+
 **Ledger** — the single accounting of device memory. Owned exclusively by the
 lifecycle goroutine.
 
@@ -77,9 +81,14 @@ meaning the management API and the console may rewrite its file. Contrast a
 definition; determines which client endpoints route to it.
 
 **Native passthrough** — proxying a request to an engine's own API unchanged,
-under `/orchd/v1/models/{id}/native/*`, subject to admission.
+under `/orchd/v1/models/{id}/native/*`, subject to admission. The sd.cpp job
+endpoints are the exception: orchd intercepts them and serves its own job ids.
 
 **Owned** — a process orchd started and supervises. Everything else is foreign.
+
+**Pre-start failure** — a job that fails before orchd submitted it to the
+engine, marked by a null `submitted_at`. Its client can submit it again
+without anything having been generated twice.
 
 **Quiescence** — the state in which orchd holds zero reservations, and
 therefore `TotalUsed` is exactly `foreign`. Used to re-anchor the ledger.
@@ -88,16 +97,22 @@ therefore `TotalUsed` is exactly `foreign`. Used to re-anchor the ledger.
 the device's actual reading. Divergence indicates wrong envelopes.
 
 **Reservation** — a claim on budget held by a loaded or loading model, or by an
-admitted in-flight job. Created at admission, released at eviction, job
-completion, or client disconnect.
+admitted in-flight job. Created at admission. Released at eviction, at job
+completion, or — after a client disconnect — when the engine confirms the
+job has stopped (`adr/0006`).
 
 **Residency** — a model's eviction class: `resident` (loaded eagerly, evictable
 under pressure), `on_demand` (loaded on first use, short TTL), `never_evict`
-(never a victim).
+(never a victim). Not the same as whether the model is loaded, which is its
+`state`.
 
 **Spill** — the Windows failure mode in which WDDM pages device memory to
 system RAM rather than failing an allocation, producing severe slowdown with no
 error. Detected by the throughput watchdog.
+
+**Unfetched result** — a completed image job whose result no client has
+collected. It holds its model against idle TTL, because the engine keeps
+results only in memory.
 
 **Watchdog** — the component that maintains throughput baselines and detects
 sustained degradation. The primary over-commit signal on Windows and macOS.

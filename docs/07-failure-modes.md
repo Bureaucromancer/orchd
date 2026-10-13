@@ -75,10 +75,18 @@ until a reload or an explicit load.
 
 **Signal.** Request context cancelled.
 
-**Response.** Text: close the upstream connection. Image: cancel the upstream
-job and release the reservation. Both release immediately rather than at the
-next poll — a held reservation for an abandoned request is a ledger leak, and
-in a queueing system it is a deadlock waiting to happen.
+**Response.**
+
+- **Text:** close the upstream connection, which frees the slot at once.
+- **Image:** cancel the upstream job, then release the reservation when the
+  engine reports it ended. That is immediate for a job still queued in the
+  engine, and at the end of the job if the build cannot cancel a generating
+  one (`adr/0006`).
+
+Neither waits for the next scheduled poll. A held reservation for abandoned
+work is a ledger leak, and in a queueing system it is a deadlock waiting to
+happen. But releasing memory the engine is still using is the worse error,
+because the next admission is then made against a fiction.
 
 ## 6. Upstream queue full (sd-server 429)
 
@@ -105,6 +113,10 @@ cannot.
 The macOS scan runs on all platforms as a belt-and-braces check, because a
 child that escaped its job object or pdeathsig is exactly the case that corrupts
 the ledger silently.
+
+orchd's job store is in memory, so a restart also forgets every job. Their ids
+answer 404 afterwards and are never reissued, which a job-aware client reads
+as lost work.
 
 ## 8. Ledger drift
 
@@ -139,3 +151,20 @@ console development loop run.
 on `/events` with the file and line. Never take the service down over a bad
 edit — the console will be writing to this directory, and a round trip through
 a dead service is a terrible failure mode.
+
+## 11. Unfetched results at eviction
+
+**Signal.** An image model is due for eviction, by idle TTL or by demand,
+while a completed job's result has not been fetched.
+
+**Response.** sd-server keeps results only in memory, so killing the process
+destroys them.
+
+- **Idle TTL:** the model is not idle until every result is fetched or the
+  engine's retention window (600 s) has passed.
+- **Demand eviction:** wait up to `unfetched_result_hold`, then evict. The
+  job's record answers 410 from then on, as the engine's own purged jobs do,
+  and the discard is logged with the job id.
+
+**Result.** A client that polls promptly never loses a result to orchd's
+housekeeping. One that has gone away costs at most a bounded wait.

@@ -15,7 +15,7 @@ incompatible resource shapes, and the scheduler exists to reconcile them.
 | Runtime unload | none | none |
 | Introspection | `/health`, `/props`, `/slots`, `/metrics` | `GET /sdcpp/v1/capabilities`, job polling |
 | Queueing | continuous batching across slots | internal FIFO with a configurable bound; returns 429 when full |
-| Cancellation | close the connection | explicit, for both queued and generating jobs |
+| Cancellation | close the connection | explicit for queued jobs; for generating jobs only where the build advertises `cancel_generating` (**SPIKE**) |
 
 A resident steady-state footprint versus a transient peak. That is the whole
 problem.
@@ -73,8 +73,8 @@ declared:
 | `Sizer` | yes, delegated to `--fit` plus measured correction | yes, by calibration only | two very different implementations of one idea |
 | `Drainable` | yes — stop routing, wait for slots to clear | partial — wait for the current job, refuse new | |
 | `JobBackend` | no | yes | native async submission with job ids |
-| `Cancelable` | by connection close | yes, explicit, queued and generating | capabilities report advertises both |
-| `ProgressReporter` | yes — `return_progress` gives prompt-processing progress | **no** | sd-server gives queue position and coarse state, no step fractions |
+| `Cancelable` | by connection close | yes, explicit; generating jobs only where advertised | capabilities report advertises both flags; a reservation is released only when the engine confirms (`adr/0006`) |
+| `ProgressReporter` | yes — `return_progress` gives prompt-processing progress | **no** | sd-server gives queue position and coarse state; newer builds add step counts only while a preview is enabled (**SPIKE**) |
 
 sd.cpp exercising `JobBackend` and `Cancelable` while leaving
 `ProgressReporter` unimplemented is useful: it proves the optional capabilities

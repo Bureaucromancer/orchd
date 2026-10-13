@@ -31,9 +31,9 @@ its author on day one. Everything else is elaboration.
 Multi-device and multi-GPU. ComfyUI and vLLM backends. ROCm, Intel, and
 CPU-only scheduling. The gateway and chat-UI packages of the wider suite.
 Authentication beyond bearer-token passthrough. Batch-by-model queue
-reordering. Per-step progress reporting for image jobs (the engine does not
-provide it). Any persistence beyond the calibration cache and the config
-tree.
+reordering. Per-step progress reporting for image jobs (orchd relays whatever
+step counts the engine reports, but builds nothing on them). Any persistence
+beyond the calibration cache and the config tree.
 
 These are omissions of sequencing, not of intent. The abstractions are shaped
 so that adding a backend or a second device does not require reopening the
@@ -62,7 +62,15 @@ The console comes after the core rather than alongside it because the console
 is a client of an API that does not exist yet. Building it earlier would mean
 designing that API against a UI mockup instead of against the scheduler's real
 state. It does, however, impose requirements on the core *now* — see
-`08-console.md` § "What the core must do first".
+`08-console.md` § "What the core must do first". A read-only console can still
+follow M1, against the endpoints that exist. What waits for the core is
+anything that writes, or that depends on admission arithmetic. See
+`09-roadmap.md`.
+
+The first job-aware client is Magic Lantern, a generation front-end built
+alongside orchd. It submits image jobs through native passthrough and reads
+model state from the management API. `05-api.md` § "Job-aware clients" lists
+what it depends on, and its needs are why the image half of M3 follows M1.
 
 ## What the engines already do
 

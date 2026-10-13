@@ -41,12 +41,20 @@ object carries `id`, `kind`, `status`, `created`, `started`, `completed`,
 `queue_position`, `result`, `error`.
 
 **There are no per-step progress fractions.** Queue position and coarse state
-are all the engine offers. This is why `ProgressReporter` is unimplemented for
-this backend, and it is a useful proof that the optional capabilities are
-genuinely optional.
+are all the engine offers by default. Builds with native-API previews add
+`step` and `total_steps` while a preview is enabled; this is unverified on the
+pinned build (`11-open-questions.md` item 19). orchd relays those fields
+untouched but builds nothing on them, so `ProgressReporter` stays
+unimplemented for this backend. That is a useful proof that the optional
+capabilities are genuinely optional.
 
 Submission errors: `400` for bad parameters or an unsupported model mode,
 `429` when the job queue is full, `500` otherwise.
+
+Cancelling a generating job is build-dependent. Read `cancel_generating` from
+`features_by_mode`; a `409` means the job runs on, and its reservation is held
+until it ends (`adr/0006`). The two readings of the API disagree here
+(`11-open-questions.md` item 18).
 
 ## Why orchd always submits async
 
@@ -104,11 +112,16 @@ schema exposes `vae_tiling_params`: `enabled`, `temporal_tiling`, `tile_size_x`,
 `vae_tiling: auto | always | never` in the model definition. Under `auto`, orchd
 enables tiling when the untiled envelope would not fit the coexist partition,
 trading some decode speed for a much flatter peak. **This is the one case where
-orchd rewrites a native request body** — it is logged, and the job record
-reports that it happened.
+orchd rewrites a native request body**, and it fills only what the request
+leaves unset.
 
-The speed cost at various tile sizes is unmeasured; see
-`11-open-questions.md` item 11.
+- A request that sets `vae_tiling_params` is never changed. It waits for room
+  instead, or is rejected as `never_fits`.
+- Every rewrite is logged and listed in the job record's `orchd.rewrites`.
+
+Tiling may change pixels as well as speed, which matters to clients that
+check reproduction. Both costs are unmeasured; see `11-open-questions.md`
+item 11.
 
 ## Queue bound
 
@@ -144,6 +157,20 @@ Base64 image payloads through orchd's proxy should be streamed to disk or
 relayed rather than accumulated in memory per job — a batch of 1024×1024 PNGs
 is tens of megabytes and the job store must not hold them.
 
+## Result retention
+
+Jobs live only in the engine's memory. A finished job is kept for 600 s,
+answers `410` for another 600 s, then `404`; a process exit loses everything.
+So an image model must not be evicted while a completed job's result is
+unfetched (`04-admission.md`, eviction rule 6). orchd relays results; it does
+not keep copies.
+
+## Pinned build
+
+Not yet pinned (W0). Start from the build Lemonade ships, `master-894-017cc8e`
+(Sep 22, 2026), so that Magic Lantern's recorded fixtures apply unchanged.
+That build predates native-API previews and the upscale route.
+
 ## Known issue
 
 There is an upstream report of `GET /sdcpp/v1/capabilities` returning 500 on
@@ -151,3 +178,8 @@ some builds while the OpenAI and A1111 families work. Since orchd uses
 capabilities as its readiness gate, the load gate should fall back to a second
 signal (a 200 from `GET /v1/models`) and log loudly rather than failing the
 load outright. Verify against the pinned build.
+
+The fallback has a second cost. `GET /orchd/v1/models/{id}` serves the
+capabilities document cached at the readiness gate, and clients such as Magic
+Lantern build their descriptors from it. A load that passed on the fallback
+leaves `engine_capabilities` null.

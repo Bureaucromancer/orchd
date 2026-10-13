@@ -61,6 +61,10 @@ console needs download jobs to look like image jobs, and retrofitting that is
 worse than designing for it. Kinds: `img_gen`, `vid_gen`, `download`,
 `calibrate`.
 
+Job ids are ULIDs and never reused. The store is in memory, so a restart
+forgets every job. An old id then answers 404, which a client reads as lost
+work rather than as someone else's job.
+
 **watchdog** — throughput baselines per model and detection of sustained
 degradation. On Windows this is the primary over-commit signal, because the
 WDDM driver pages rather than failing. See `07-failure-modes.md`.
@@ -97,21 +101,32 @@ POST /v1/images/generations (model=C)
   ├─ lifecycle: admit(C, img_gen, params)
   ├─ on Admitted: POST /sdcpp/v1/img_gen  → 202 + upstream job id
   ├─ poll GET /sdcpp/v1/jobs/{id} until terminal
-  ├─ on client disconnect: POST /sdcpp/v1/jobs/{id}/cancel, release reservation
+  ├─ on client disconnect: POST /sdcpp/v1/jobs/{id}/cancel; release the
+  │                       reservation when the engine reports the job ended
+  │                       (adr/0006)
   └─ on completion: return OpenAI-shaped response
 ```
 
 Using the synchronous endpoints would tie up a connection and forfeit job
 identity, cancellation and queue visibility. See `adr/0003`.
 
+The same job shim serves native passthrough. A client that submits to
+`…/native/sdcpp/v1/img_gen` gets an orchd job id straight away, and polls
+orchd's record, not the engine's. See `05-api.md` § "Job endpoints are
+intercepted".
+
 orchd's job state is a superset of the engine's, because orchd has a state the
 engine cannot have — waiting for memory:
 
 ```
-queued_admission → submitted → queued(upstream) → generating → completed
-                                                             ↘ failed
-                                                             ↘ cancelled
+queued_admission → [loading] → submitted → queued(upstream) → generating → completed
+                                                                         ↘ failed
+                                                                         ↘ cancelled
 ```
+
+`loading` appears only when admission had to start the model. A job that
+fails before `submitted` never reached the engine; its record says so with a
+null `submitted_at` (`05-api.md` § "Errors").
 
 ## Threading rules
 

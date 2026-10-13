@@ -1,6 +1,6 @@
 # 10 — Acceptance scenarios
 
-Thirty-four scenarios, mapped to milestones. These are integration-level: they
+Forty scenarios, mapped to milestones. These are integration-level: they
 run against a real orchd with real or faked engines. Admission *unit* tests are
 separate and must run without a GPU.
 
@@ -12,6 +12,9 @@ separate and must run without a GPU.
 - **Fake engines.** Small binaries that mimic `llama-server` and `sd-server`
   health, job and streaming semantics, with programmable load time, memory
   claim, failure injection and throughput. Most scenarios run against these.
+  The fake sd-server's job semantics are checked against fixtures recorded
+  from the pinned build. Magic Lantern's adapter replays the same fixtures in
+  its contract tests.
 - **Synthetic foreign consumer.** A tool that allocates and holds a specified
   amount of device memory on demand, so foreign-pressure and yield scenarios
   are reproducible in CI rather than requiring someone to launch a game. This
@@ -62,10 +65,14 @@ a valid image; internally the native async endpoint was used.
 sees orchd's `queued_admission` state before the engine's `queued`.
 
 **S11** Cancel on disconnect. Client disconnects mid-generation; an upstream
-cancel is observed within 1 s and the reservation is released.
+cancel is observed within 1 s. The reservation is released when the engine
+reports the job cancelled, and never before (`adr/0006`). On a build that
+refuses to cancel a generating job, that is when the job ends.
 
-**S12** Explicit cancel. `POST /orchd/v1/jobs/{id}/cancel` cancels both a
-queued and a generating job.
+**S12** Explicit cancel. `POST /orchd/v1/jobs/{id}/cancel` cancels a queued
+job, and a generating job where the build advertises `cancel_generating`.
+Where it does not, the job shows `cancelling` and keeps its reservation until
+it ends.
 
 **S13** Calibration stability. Three calibration runs of the same model at the
 same settings produce peaks within 5% of each other.
@@ -147,6 +154,39 @@ and line.
 
 **S34** Unchanged-definition reload. A reload that does not change a model's
 hash leaves its process, reservation and calibration untouched.
+
+## M3 — job-aware clients
+
+Added after the first thirty-four, for the guarantees in `05-api.md` §
+"Job-aware clients". They gate M3 alongside S9–S13.
+
+**S35** Introspection never loads. With a model unloaded,
+`GET /orchd/v1/models/{id}` returns `state: unloaded` and the capabilities
+captured at its last load. No process starts and the ledger is unchanged.
+
+**S36** Interception. A passthrough `img_gen` returns 202 with an orchd job id
+before admission. Polling shows `status: queued` and `orchd.state:
+queued_admission`. Fields the fake engine adds that orchd does not know are
+present in the relayed job object.
+
+**S37** Unfetched results hold the model. A completed job's result is not
+fetched; the model outlives its idle TTL, and the result is fetchable until
+the engine's retention window passes. A demand eviction waits at most
+`unfetched_result_hold`; then the job answers 410 and the discard is logged.
+
+**S38** Explicit values are not rewritten. The setup: `vae_tiling: auto`, and
+a partition too small for an untiled decode.
+- A job that sets tiling off waits rather than being tiled.
+- A job that leaves it unset is tiled, and `orchd.rewrites` says so.
+
+**S39** Pre-start failures are marked.
+- An async job waiting past `queue_timeout` stays queued.
+- When a yield begins, it fails with `yielded` and a null `submitted_at`.
+- After an orchd restart, an old job id answers 404 and is never reissued.
+
+**S40** Event resume. A subscriber reconnecting with a recent `Last-Event-ID`
+receives exactly the events it missed. One reconnecting with an id from an
+earlier boot receives `reset`.
 
 ---
 

@@ -60,6 +60,13 @@ In order, with the asymmetry from `01-engine-shapes.md`:
 4. **Within a class, evict longest-idle first.**
 5. `residency: never_evict` models are never victims. They can still be
    rejected at admission if what remains cannot fit the request.
+6. **A model holding an unfetched result is not idle.** sd-server keeps a
+   finished job's result in memory for its retention window (600 s), and the
+   result dies with the process.
+   - Idle TTL does not start until every result has been fetched or that
+     window has passed.
+   - Demand eviction waits at most `unfetched_result_hold`, then proceeds and
+     logs the discarded job (`07-failure-modes.md` §11).
 
 ### Idle TTL
 
@@ -71,7 +78,9 @@ that nothing is asking for costs only the memory it is holding.
 
 Image models default to a short TTL (`120s`) because image use is bursty and
 diffusion weights are expensive to hold; a warm-cache reload at the front of a
-minute-long job is acceptable. Text models default to resident.
+minute-long job is acceptable. The clock starts when the last result is
+fetched, not when the last job finishes (rule 6). Text models default to
+resident.
 
 ## Queueing
 
@@ -81,8 +90,12 @@ request by an `X-Orchd-Priority` header.
 
 - A queued request is re-evaluated on every event that could change the answer:
   job completion, load completion, eviction, device poll crossing a threshold.
-- `queue_timeout` bounds the wait; on expiry, 503 with `Retry-After` derived
-  from the estimated time for the blocking work to finish, not a constant.
+- `queue_timeout` bounds the wait of a request that holds a connection. On
+  expiry it gets 503 with `Retry-After` derived from the estimated time for
+  the blocking work to finish, not a constant.
+- An async job submitted through passthrough is exempt. Its client polls and
+  can cancel, so nothing is left hanging, and the job waits in
+  `queued_admission` until it is admitted.
 - Queue position is visible: `GET /orchd/v1/status` and, for image jobs, the
   job record.
 - Starvation guard: a request that has been passed over `N` times is promoted
@@ -111,7 +124,9 @@ When smoothed foreign usage crosses the threshold:
 1. Drain and evict every model whose residency is not `never_evict`.
 2. Enter `yielded` state; stop admitting.
 3. Requests during a yield get 503 with `Retry-After`, **not** a queue slot. A
-   game session lasts hours; a two-hour queue is a bug.
+   game session lasts hours; a two-hour queue is a bug. Async jobs already
+   waiting for admission fail with `yielded` and a null `submitted_at`, so a
+   job-aware client can hold them in its own queue instead.
 4. Leave `yielded` only after foreign usage stays below the threshold for
    `yield_recovery_delay`.
 

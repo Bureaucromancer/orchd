@@ -42,12 +42,16 @@ mixed load; scenarios S5–S8 pass.
 
 sdcpp backend. Native async submission, job shim, OpenAI-shaped synchronous
 wrapper, cancel-on-disconnect, envelope calibration, VAE tiling policy.
-Passthrough routes.
+Passthrough routes, with the job endpoints intercepted, and introspection that
+never loads (`05-api.md`).
 
-**Done when.** An image generates through `/v1/images/generations`; the same
-job is reachable and cancellable through passthrough; a disconnected client's
-job is observably cancelled upstream within a second; calibration produces a
-stable envelope across three runs within 5%; scenarios S9–S13 pass.
+**Done when.**
+- An image generates through `/v1/images/generations`.
+- The same job is reachable and cancellable through passthrough.
+- A disconnected client's job is observably cancelled upstream within a
+  second.
+- Calibration produces a stable envelope across three runs within 5%.
+- Scenarios S9–S13 and S35–S40 pass.
 
 ---
 
@@ -122,9 +126,20 @@ a terminal.
 
 ## Sequencing notes
 
-- **C1 may start during M5.** It consumes only read endpoints that stabilise at
-  M4, and running it against a live M4 build is the best available review of
-  the API.
+- **The image half of M3 comes straight after M1.** orchd is built alongside
+  Magic Lantern, which needs the image path first, and `00-scope.md` already
+  puts image generation first.
+  - The sd.cpp backend, the job shim and interception, cancellation, the
+    OpenAI wrapper and introspection need no device probe, so they run on
+    M1's stub admission.
+  - Calibration and the VAE tiling policy need the ledger, so they follow M2.
+  - The order is M1 → M3 (backend half) → M2 → M3 (the rest) → M4. M3 is done
+    only when all of it is.
+- **A read-only console may start after M1.** It consumes `/status`,
+  `/events`, `/models` and `/jobs` as they exist and grows with them.
+  - Those shapes stabilise at M4, so expect churn until then.
+  - Running it against the live API is the best available review of that API.
+  - It writes nothing until C2.
 - **C2 must not start before M4 is done.** The fit preview is the console's
   distinguishing feature and it is meaningless until admission arithmetic is
   real.
