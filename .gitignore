@@ -1,0 +1,28 @@
+# build output
+/orchd
+/orchd.exe
+/dist/
+/build/
+
+# console bundle intermediates (the built bundle itself IS committed —
+# contributors must be able to build orchd without a Node toolchain)
+/web/node_modules/
+/web/.svelte-kit/
+/web/dist/
+
+# local runtime state
+/.orchd/
+*.local.yaml
+models.d/*.local.yaml
+calibration.json
+
+# test output
+/coverage.out
+/testresults/
+*.test
+
+# editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
